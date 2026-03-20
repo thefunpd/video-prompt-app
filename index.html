@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>비디오 프롬프트 생성기</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f7fa; color: #1a1a2e; min-height: 100vh; }
+
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+header { text-align: center; padding: 40px 0 20px; }
+header h1 { font-size: 2rem; margin-bottom: 8px; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+header p { color: #666; font-size: 0.95rem; }
+
+/* API Key */
+.api-key-bar { display: flex; gap: 8px; margin-bottom: 24px; align-items: center; }
+.api-key-bar input { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.9rem; }
+.api-key-bar .status { font-size: 0.8rem; color: #888; white-space: nowrap; }
+.api-key-bar .status.ok { color: #22c55e; }
+
+/* Steps */
+.steps { display: flex; justify-content: center; gap: 8px; margin-bottom: 32px; flex-wrap: wrap; }
+.step { display: flex; align-items: center; gap: 6px; }
+.step-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; background: #e2e8f0; color: #94a3b8; transition: all 0.3s; }
+.step-circle.active { background: #667eea; color: #fff; box-shadow: 0 2px 8px rgba(102,126,234,0.4); }
+.step-circle.done { background: #22c55e; color: #fff; }
+.step-label { font-size: 0.82rem; color: #94a3b8; }
+.step-label.active { color: #667eea; font-weight: 600; }
+.step-label.done { color: #22c55e; }
+.step-line { width: 24px; height: 2px; background: #e2e8f0; margin: 0 4px; }
+.step-line.done { background: #22c55e; }
+
+/* Panels */
+.panel { display: none; animation: fadeIn 0.3s; }
+.panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Form */
+.form-group { margin-bottom: 20px; }
+.form-group label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; color: #334155; }
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; padding: 12px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px;
+  font-size: 0.95rem; transition: border-color 0.2s; background: #fff;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+.form-group textarea { resize: vertical; min-height: 100px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 12px 24px; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; width: 100%; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.4); }
+.btn-primary:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-sm { padding: 6px 14px; font-size: 0.8rem; border-radius: 6px; }
+.btn-copy { background: #f1f5f9; color: #475569; }
+.btn-copy:hover { background: #e2e8f0; }
+.btn-copy.copied { background: #dcfce7; color: #16a34a; }
+.btn-export { background: #22c55e; color: #fff; }
+.btn-export:hover { background: #16a34a; }
+.btn-reset { background: none; border: none; color: #ef4444; font-size: 0.85rem; cursor: pointer; margin-top: 8px; }
+.btn-reset:hover { text-decoration: underline; }
+.btn-back { background: #f1f5f9; color: #475569; margin-right: 8px; }
+.btn-back:hover { background: #e2e8f0; }
+
+/* Cards */
+.card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #f1f5f9; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.card-header h3 { font-size: 1rem; color: #334155; }
+.card-header .badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 99px; background: #f1f5f9; color: #64748b; }
+
+.section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.section-title h2 { font-size: 1.4rem; font-weight: 700; }
+
+/* Grid */
+.meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.meta-item { padding: 10px; border-radius: 8px; font-size: 0.82rem; }
+.meta-item .meta-label { font-weight: 600; margin-bottom: 4px; }
+.meta-item.blue { background: #eff6ff; color: #2563eb; }
+.meta-item.amber { background: #fffbeb; color: #d97706; }
+.meta-item.green { background: #f0fdf4; color: #16a34a; }
+.meta-item.purple { background: #faf5ff; color: #9333ea; }
+
+.scene-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .scene-grid, .meta-grid { grid-template-columns: 1fr; } }
+.scene-field label { font-size: 0.78rem; color: #94a3b8; font-weight: 600; }
+.scene-field p { font-size: 0.9rem; margin-top: 2px; }
+
+.veo-prompt-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; font-family: 'SF Mono', Menlo, monospace; font-size: 0.85rem; line-height: 1.6; white-space: pre-wrap; margin-bottom: 12px; }
+
+/* Loading */
+.loading { text-align: center; padding: 60px 20px; }
+.spinner { width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading p { color: #64748b; }
+
+/* Error */
+.error-msg { background: #fef2f2; color: #dc2626; padding: 14px; border-radius: 10px; text-align: center; margin-bottom: 20px; font-size: 0.9rem; }
+
+/* Action bar */
+.action-bar { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>비디오 프롬프트 생성기</h1>
+    <p>옵션 입력부터 Veo 프롬프트까지 한 번에</p>
+    <button class="btn-reset" id="resetBtn" style="display:none" onclick="resetAll()">처음부터 다시 시작</button>
+  </header>
+
+  <div class="api-key-bar">
+    <input type="password" id="apiKey" placeholder="Anthropic API Key (비워두면 테스트 모드)" />
+    <span class="status" id="keyStatus">테스트 모드</span>
+  </div>
+
+  <div class="steps" id="stepsBar"></div>
+
+  <div id="errorMsg" class="error-msg" style="display:none"></div>
+  <div id="loadingPanel" class="loading" style="display:none">
+    <div class="spinner"></div>
+    <p id="loadingMsg">생성 중...</p>
+  </div>
+
+  <!-- Step 1: Options -->
+  <div class="panel active" id="panel1">
+    <form id="optionsForm">
+      <div class="form-group">
+        <label for="targetAudience">타겟 (대상)</label>
+        <input type="text" id="targetAudience" placeholder="예: 초등학생, 직장인, 대학생" required />
+      </div>
+      <div class="form-group">
+        <label for="language">언어</label>
+        <select id="language">
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="videoFormat">영상 포맷</label>
+        <select id="videoFormat">
+          <option value="tutorial">튜토리얼</option>
+          <option value="explainer">설명 영상</option>
+          <option value="edutainment-short">에듀테인먼트 숏폼</option>
+          <option value="lecture">강의</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="curriculum">커리큘럼 (주제)</label>
+        <textarea id="curriculum" placeholder="영상에서 다룰 주제와 내용을 상세히 입력하세요" required></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">대본 생성 시작</button>
+    </form>
+  </div>
+
+  <!-- Step 2: Script -->
+  <div class="panel" id="panel2"></div>
+
+  <!-- Step 3: Storyboard -->
+  <div class="panel" id="panel3"></div>
+
+  <!-- Step 4: Veo Prompts -->
+  <div class="panel" id="panel4"></div>
+</div>
+
+<script>
+const FORMAT_LABELS_KO = { 'tutorial': '튜토리얼', 'explainer': '설명 영상', 'edutainment-short': '에듀테인먼트 숏폼', 'lecture': '강의' };
+const FORMAT_LABELS_EN = { 'tutorial': 'Tutorial', 'explainer': 'Explainer', 'edutainment-short': 'Edutainment Short', 'lecture': 'Lecture' };
+function getFormatLabel(format, lang) { return lang === 'en' ? FORMAT_LABELS_EN[format] : FORMAT_LABELS_KO[format]; }
+const STEPS = [{ n: 1, label: '옵션 입력' }, { n: 2, label: '대본 생성' }, { n: 3, label: '스토리보드' }, { n: 4, label: 'Veo 프롬프트' }];
+
+let state = { step: 1, options: null, script: null, storyboard: null, veoPrompts: null };
+
+// --- Steps UI ---
+function renderSteps() {
+  const bar = document.getElementById('stepsBar');
+  bar.innerHTML = STEPS.map((s, i) => {
+    const cls = s.n === state.step ? 'active' : s.n < state.step ? 'done' : '';
+    const lbl = s.n === state.step ? 'active' : s.n < state.step ? 'done' : '';
+    const circle = s.n < state.step ? '✓' : s.n;
+    const line = i < STEPS.length - 1 ? `<div class="step-line ${s.n < state.step ? 'done' : ''}"></div>` : '';
+    return `<div class="step"><div class="step-circle ${cls}">${circle}</div><span class="step-label ${lbl}">${s.label}</span></div>${line}`;
+  }).join('');
+  document.getElementById('resetBtn').style.display = state.step > 1 ? '' : 'none';
+}
+
+function goTo(step) {
+  state.step = step;
+  document.querySelectorAll('.panel').forEach((p, i) => p.classList.toggle('active', i + 1 === step));
+  renderSteps();
+}
+
+// --- API Key ---
+const apiKeyInput = document.getElementById('apiKey');
+const keyStatus = document.getElementById('keyStatus');
+apiKeyInput.addEventListener('input', () => {
+  const v = apiKeyInput.value.trim();
+  if (v.startsWith('sk-') && v.length > 20) { keyStatus.textContent = 'API 연동'; keyStatus.className = 'status ok'; }
+  else { keyStatus.textContent = v ? '형식 확인' : '테스트 모드'; keyStatus.className = 'status'; }
+});
+
+function getApiKey() {
+  return apiKeyInput.value.trim() || null;
+}
+
+function isTestMode() {
+  return !getApiKey();
+}
+
+// --- Claude API ---
+async function callClaude(system, user) {
+  const key = getApiKey();
+  if (!key) return null;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      system,
+      messages: [{ role: 'user', content: user }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API 오류 (${res.status})`);
+  }
+
+  const data = await res.json();
+  const text = data.content.find(b => b.type === 'text')?.text || '';
+  const raw = text.trim();
+
+  try { return JSON.parse(raw); } catch {}
+  const m = raw.match(/\{[\s\S]*\}/) || raw.match(/\[[\s\S]*\]/);
+  if (m) return JSON.parse(m[0]);
+  throw new Error('JSON 파싱 실패');
+}
+
+// --- Mock Data Generator (입력값 기반) ---
+function generateMockScript(opts) {
+  const topic = opts.curriculum;
+  const target = opts.targetAudience;
+  const fmt = getFormatLabel(opts.videoFormat, opts.language);
+  const en = opts.language === 'en';
+
+  if (en) {
+    return {
+      title: `${topic} - ${fmt} for ${target}`,
+      sections: [
+        { heading: "Intro", content: `Hello everyone! Today we're going to learn about '${topic}'.\nWe've prepared this so that even ${target} can easily follow along.`, duration: "20s" },
+        { heading: "Core Concepts", content: `Let's look at the most important concepts of ${topic}.\nFirst, we need to understand the basic principles.\nSecond, we'll get a feel for it through real examples.\nThird, we'll practice applying it ourselves.`, duration: "1min" },
+        { heading: "Examples & Practice", content: `Now it's time for hands-on practice!\nWe'll work through ${topic} examples one by one.\nStarting simple, then gradually increasing difficulty.\nWe'll also cover common mistakes that ${target} often make.`, duration: "1min 30s" },
+        { heading: "Summary & Wrap-up", content: `Let's review what we learned today.\n1. Basic concepts of ${topic}\n2. Key principles and examples\n3. Hands-on application\nSee you next time with more great content!`, duration: "30s" }
+      ],
+      totalDuration: "About 3min 20s"
+    };
+  }
+
+  return {
+    title: `${topic} - ${target}을 위한 ${fmt}`,
+    sections: [
+      { heading: "인트로", content: `안녕하세요! 오늘은 '${topic}'에 대해 알아보겠습니다.\n${target}도 쉽게 이해할 수 있도록 차근차근 설명해드릴게요.`, duration: "20초" },
+      { heading: "핵심 개념 설명", content: `${topic}의 가장 중요한 핵심 개념을 살펴볼게요.\n첫 번째, 기본 원리를 이해해야 합니다.\n두 번째, 실제 사례를 통해 감을 잡아보겠습니다.\n세 번째, 직접 적용해보는 연습을 해볼 거예요.`, duration: "1분" },
+      { heading: "예제와 실습", content: `자, 이제 실전이에요!\n${topic} 관련 예제를 하나씩 풀어볼게요.\n처음에는 간단한 것부터, 점점 난이도를 올려볼게요.\n${target}이 자주 실수하는 부분도 짚어드릴게요.`, duration: "1분 30초" },
+      { heading: "정리 & 마무리", content: `오늘 배운 내용을 정리해볼게요.\n1. ${topic}의 기본 개념\n2. 핵심 원리와 사례\n3. 실습을 통한 적용\n다음 시간에도 유익한 내용으로 찾아올게요!`, duration: "30초" }
+    ],
+    totalDuration: "약 3분 20초"
+  };
+}
+
+function generateMockStoryboard(script, opts) {
+  const en = opts.language === 'en';
+  const angles = en
+    ? ['Static front shot', 'Medium shot with slight panning', 'Zoom-in close-up', 'Wide shot to close-up transition']
+    : ['정면 고정샷', '미디엄 샷, 약간의 패닝', '줌인 클로즈업', '와이드 샷에서 클로즈업 전환'];
+
+  return script.sections.map((sec, i) => ({
+    sceneNumber: i + 1,
+    description: en ? `${sec.heading} scene` : `${sec.heading} 장면`,
+    dialogue: sec.content.split('\n')[0],
+    visualDescription: i === 0
+      ? (en ? `Title card '${script.title}' appears, topic-related illustration animation in background` : `타이틀 카드 '${script.title}' 등장, 배경에 주제 관련 일러스트 애니메이션`)
+      : i === script.sections.length - 1
+      ? (en ? `Summary infographic appears, key highlights, ending card` : `핵심 요약 인포그래픽 등장, 주요 키워드 하이라이트, 엔딩 카드`)
+      : (en ? `Visual materials appear alongside ${sec.heading} content, key points revealed one by one` : `주제 관련 시각 자료와 함께 ${sec.heading} 내용이 화면에 표시, 키포인트가 하나씩 나타남`),
+    cameraAngle: angles[i % angles.length],
+    duration: sec.duration
+  }));
+}
+
+function generateMockVeoPrompts(storyboard, opts) {
+  const styles = ['Modern flat design with vibrant gradients', 'Clean minimalist infographic style', 'Warm and engaging educational aesthetic', 'Dynamic motion graphics with smooth transitions'];
+  const moods = ['Welcoming and energetic', 'Focused and informative', 'Interactive and encouraging', 'Warm and conclusive'];
+  const actions = ['Title animation with bounce effect', 'Key points appear one by one with slide-in', 'Visual examples demonstrate concepts with highlights', 'Summary cards flip in, ending animation plays'];
+
+  return storyboard.map((sc, i) => ({
+    sceneNumber: sc.sceneNumber,
+    prompt: `${sc.visualDescription}. ${sc.dialogue}. Camera: ${sc.cameraAngle}. Style: ${styles[i % styles.length]}. Duration: ${sc.duration}. High quality 4K educational content.`,
+    cameraAngle: sc.cameraAngle,
+    mood: moods[i % moods.length],
+    action: actions[i % actions.length],
+    visualStyle: styles[i % styles.length],
+    duration: sc.duration
+  }));
+}
+
+// --- Prompts ---
+function buildScriptPrompt(opts) {
+  const lang = opts.language === 'ko' ? '한국어로 대본을 작성하세요.' : 'Write the script in English.';
+  return {
+    system: `당신은 전문 영상 대본 작가입니다. ${lang}
+반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요.
+{
+  "title": "영상 제목",
+  "sections": [
+    { "heading": "섹션 제목", "content": "섹션 내용 (나레이션/대사 포함)", "duration": "예상 시간" }
+  ],
+  "totalDuration": "총 영상 길이"
+}`,
+    user: `다음 조건으로 영상 대본을 작성해주세요:
+- 타겟: ${opts.targetAudience}
+- 포맷: ${getFormatLabel(opts.videoFormat, opts.language)}
+- 주제/커리큘럼: ${opts.curriculum}`
+  };
+}
+
+function buildStoryboardPrompt(script, opts) {
+  const lang = opts.language === 'ko' ? '한국어로 작성하세요.' : 'Write in English.';
+  return {
+    system: `당신은 전문 영상 스토리보드 작가입니다. 대본을 장면(scene)별로 분해하여 스토리보드를 만드세요. ${lang}
+반드시 아래 JSON 배열 형식으로만 응답하세요.
+[
+  {
+    "sceneNumber": 1,
+    "description": "장면 설명",
+    "dialogue": "대사/나레이션",
+    "visualDescription": "화면에 보이는 것",
+    "cameraAngle": "카메라 앵글",
+    "duration": "장면 길이"
+  }
+]`,
+    user: `다음 대본을 스토리보드로 변환해주세요:
+
+제목: ${script.title}
+총 길이: ${script.totalDuration}
+
+${script.sections.map(s => `## ${s.heading}\n${s.content}\n(${s.duration})`).join('\n\n')}`
+  };
+}
+
+function buildVeoPrompt(storyboard, opts) {
+  return {
+    system: `당신은 Veo 영상 생성 AI를 위한 프롬프트 전문가입니다.
+각 스토리보드 장면을 Veo에서 영상을 생성할 수 있는 상세한 프롬프트로 변환하세요.
+카메라 앵글, 분위기, 동작, 비주얼 스타일을 구체적으로 포함하세요.
+반드시 아래 JSON 배열 형식으로만 응답하세요.
+[
+  {
+    "sceneNumber": 1,
+    "prompt": "Veo에 입력할 영상 생성 프롬프트 (영어)",
+    "cameraAngle": "카메라 앵글",
+    "mood": "분위기",
+    "action": "주요 동작",
+    "visualStyle": "비주얼 스타일",
+    "duration": "장면 길이"
+  }
+]`,
+    user: `다음 스토리보드의 각 장면을 Veo 프롬프트로 변환해주세요:
+
+${storyboard.map(s => `장면 ${s.sceneNumber}: ${s.description}
+- 대사: ${s.dialogue}
+- 화면: ${s.visualDescription}
+- 앵글: ${s.cameraAngle}
+- 길이: ${s.duration}`).join('\n\n')}`
+  };
+}
+
+// --- Copy ---
+function copyText(text, btnId) {
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(btnId);
+    if (btn) { btn.textContent = '복사됨!'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('copied'); }, 2000); }
+  });
+}
+
+// --- Error / Loading ---
+function showError(msg) { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = ''; }
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+function showLoading(msg) { document.getElementById('loadingMsg').textContent = msg || '생성 중...'; document.getElementById('loadingPanel').style.display = ''; }
+function hideLoading() { document.getElementById('loadingPanel').style.display = 'none'; }
+
+// --- Render Script (Step 2) ---
+function renderScript() {
+  const s = state.script;
+  const full = `# ${s.title}\n\n${s.sections.map(x => `## ${x.heading} (${x.duration})\n${x.content}`).join('\n\n')}\n\n총 길이: ${s.totalDuration}`;
+  document.getElementById('panel2').innerHTML = `
+    <div class="section-title">
+      <h2>${s.title}</h2>
+      <div><button class="btn btn-sm btn-copy" id="cpScriptAll" onclick="copyText(\`${full.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`, 'cpScriptAll')">전체 복사</button></div>
+    </div>
+    <p style="font-size:0.85rem;color:#64748b;margin-bottom:16px">총 길이: ${s.totalDuration}</p>
+    ${s.sections.map((sec, i) => `
+      <div class="card">
+        <div class="card-header">
+          <h3>${sec.heading}</h3>
+          <span class="badge">${sec.duration}</span>
+        </div>
+        <p style="white-space:pre-wrap;line-height:1.7;font-size:0.93rem;color:#475569">${esc(sec.content)}</p>
+        <div style="text-align:right;margin-top:10px">
+          <button class="btn btn-sm btn-copy" id="cpSec${i}" onclick="copyText(${JSON.stringify(sec.content)}, 'cpSec${i}')">복사</button>
+        </div>
+      </div>`).join('')}
+    <div class="action-bar">
+      <button class="btn btn-sm btn-back" onclick="goTo(1)">← 이전</button>
+      <button class="btn btn-primary" onclick="generateStoryboard()">스토리보드 생성</button>
+    </div>`;
+}
+
+// --- Render Storyboard (Step 3) ---
+function renderStoryboard() {
+  const sb = state.storyboard;
+  const full = sb.map(s => `씬 ${s.sceneNumber}: ${s.description}\n대사: ${s.dialogue}\n화면: ${s.visualDescription}\n앵글: ${s.cameraAngle}\n길이: ${s.duration}`).join('\n\n---\n\n');
+  document.getElementById('panel3').innerHTML = `
+    <div class="section-title">
+      <h2>스토리보드</h2>
+      <button class="btn btn-sm btn-copy" id="cpSbAll" onclick="copyText(${JSON.stringify(full)}, 'cpSbAll')">전체 복사</button>
+    </div>
+    ${sb.map(sc => `
+      <div class="card">
+        <div class="card-header">
+          <h3 style="color:#667eea">씬 ${sc.sceneNumber}</h3>
+          <span class="badge">${sc.duration}</span>
+        </div>
+        <div class="scene-grid">
+          <div class="scene-field"><label>설명</label><p>${esc(sc.description)}</p></div>
+          <div class="scene-field"><label>대사</label><p>${esc(sc.dialogue)}</p></div>
+          <div class="scene-field"><label>화면</label><p>${esc(sc.visualDescription)}</p></div>
+          <div class="scene-field"><label>카메라</label><p>${esc(sc.cameraAngle)}</p></div>
+        </div>
+      </div>`).join('')}
+    <div class="action-bar">
+      <button class="btn btn-sm btn-back" onclick="goTo(2)">← 이전</button>
+      <button class="btn btn-primary" onclick="generateVeoPrompts()">Veo 프롬프트 생성</button>
+    </div>`;
+}
+
+// --- Render Veo Prompts (Step 4) ---
+function renderVeoPrompts() {
+  const vps = state.veoPrompts;
+  const full = vps.map(p => `Scene ${p.sceneNumber}:\n${p.prompt}`).join('\n\n---\n\n');
+  document.getElementById('panel4').innerHTML = `
+    <div class="section-title">
+      <h2>Veo 프롬프트</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-copy" id="cpVeoAll" onclick="copyText(${JSON.stringify(full)}, 'cpVeoAll')">전체 복사</button>
+        <button class="btn btn-sm btn-export" onclick="exportJSON()">JSON 내보내기</button>
+      </div>
+    </div>
+    ${vps.map((vp, i) => `
+      <div class="card">
+        <div class="card-header">
+          <h3 style="color:#9333ea">씬 ${vp.sceneNumber}</h3>
+          <button class="btn btn-sm btn-copy" id="cpVeo${i}" onclick="copyText(${JSON.stringify(vp.prompt)}, 'cpVeo${i}')">복사</button>
+        </div>
+        <div class="veo-prompt-box">${esc(vp.prompt)}</div>
+        <div class="meta-grid">
+          <div class="meta-item blue"><div class="meta-label">앵글</div>${esc(vp.cameraAngle)}</div>
+          <div class="meta-item amber"><div class="meta-label">분위기</div>${esc(vp.mood)}</div>
+          <div class="meta-item green"><div class="meta-label">동작</div>${esc(vp.action)}</div>
+          <div class="meta-item purple"><div class="meta-label">스타일</div>${esc(vp.visualStyle)}</div>
+        </div>
+      </div>`).join('')}
+    <div class="action-bar">
+      <button class="btn btn-sm btn-back" onclick="goTo(3)">← 이전</button>
+    </div>`;
+}
+
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// --- Actions ---
+document.getElementById('optionsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideError();
+  state.options = {
+    targetAudience: document.getElementById('targetAudience').value.trim(),
+    language: document.getElementById('language').value,
+    videoFormat: document.getElementById('videoFormat').value,
+    curriculum: document.getElementById('curriculum').value.trim()
+  };
+
+  showLoading('대본을 생성하고 있습니다...');
+  try {
+    if (isTestMode()) {
+      await new Promise(r => setTimeout(r, 600));
+      state.script = generateMockScript(state.options);
+    } else {
+      const { system, user } = buildScriptPrompt(state.options);
+      state.script = await callClaude(system, user);
+    }
+    if (!state.script || !state.script.title) throw new Error('대본 형식 오류');
+    hideLoading();
+    renderScript();
+    goTo(2);
+  } catch (err) { hideLoading(); showError(err.message); }
+});
+
+async function generateStoryboard() {
+  hideError();
+  showLoading('스토리보드를 생성하고 있습니다...');
+  try {
+    if (isTestMode()) {
+      await new Promise(r => setTimeout(r, 600));
+      state.storyboard = generateMockStoryboard(state.script, state.options);
+    } else {
+      const { system, user } = buildStoryboardPrompt(state.script, state.options);
+      state.storyboard = await callClaude(system, user);
+    }
+    if (!Array.isArray(state.storyboard)) throw new Error('스토리보드 형식 오류');
+    hideLoading();
+    renderStoryboard();
+    goTo(3);
+  } catch (err) { hideLoading(); showError(err.message); }
+}
+
+async function generateVeoPrompts() {
+  hideError();
+  showLoading('Veo 프롬프트를 생성하고 있습니다...');
+  try {
+    if (isTestMode()) {
+      await new Promise(r => setTimeout(r, 600));
+      state.veoPrompts = generateMockVeoPrompts(state.storyboard, state.options);
+    } else {
+      const { system, user } = buildVeoPrompt(state.storyboard, state.options);
+      state.veoPrompts = await callClaude(system, user);
+    }
+    if (!Array.isArray(state.veoPrompts)) throw new Error('Veo 프롬프트 형식 오류');
+    hideLoading();
+    renderVeoPrompts();
+    goTo(4);
+  } catch (err) { hideLoading(); showError(err.message); }
+}
+
+function exportJSON() {
+  const data = { options: state.options, script: state.script, storyboard: state.storyboard, veoPrompts: state.veoPrompts };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `video-prompt-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function resetAll() {
+  state = { step: 1, options: null, script: null, storyboard: null, veoPrompts: null };
+  hideError(); hideLoading();
+  document.getElementById('optionsForm').reset();
+  goTo(1);
+}
+
+renderSteps();
+</script>
+</body>
+</html>
